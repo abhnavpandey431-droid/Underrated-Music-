@@ -958,3 +958,422 @@ function renderProfileForm(){
         <input id="f-handle" value="${escapeHtml(draftProfile.handle)}" placeholder="youtube.com/@yourname">
       </div>` : `
       <div class="field">
+<label>Your handle (portfolio, YouTube, or any link)</label>
+        <input id="f-handle" value="${escapeHtml(draftProfile.handle)}" placeholder="youtube.com/@yourstudio">
+      </div>`}
+
+      <div class="field">
+        <label>Upload your work (describe it — video/text link, or a quick note)</label>
+        <textarea id="f-work" rows="2" placeholder="e.g. link to your latest track, or paste lyrics">${escapeHtml(draftProfile.workNote)}</textarea>
+      </div>
+
+      <div class="field">
+        <label>Describe yourself privately</label>
+        <textarea id="f-bio" rows="3" placeholder="UPI ID, WhatsApp number, or anything only the platform manager can see">${escapeHtml(draftProfile.bio)}</textarea>
+        <div class="muted" style="font-size:11.5px;margin-top:4px;">Only the platform manager can access this. It is never shown publicly.</div>
+      </div>
+
+      <button class="btn btn-primary btn-block" id="submit-profile" style="margin-top:8px;">Submit</button>
+    </div>
+  </div>`;
+}
+
+/* ---------- DEAL SCREEN (standalone, first-time after profile) ---------- */
+function renderDealScreen(){
+  return `
+  <div class="screen" style="justify-content:flex-end;background:rgba(0,0,0,.4);">
+    ${dealSheetMarkup(true)}
+  </div>`;
+}
+function dealSheetMarkup(standalone){
+  return `
+  <div class="deal-sheet" style="border-radius:${standalone?'22px 22px 0 0':'22px 22px 0 0'};margin-top:auto;">
+    <button class="close-x" data-action="close-deal">✕</button>
+    <div class="deal-badge">💛 THE 50-50 DEAL</div>
+    <h2>Can't pay your music designer?</h2>
+    <p>If you don't have money to pay your music designer, and you write well, you and your editor can split rights 50-50 on that track.</p>
+    <p>The song gets released under the <b style="color:var(--text);">Underrated Music</b> banner — uploaded to our YouTube channel as a collab, and distributed to YouTube Music, Spotify, JioSaavn, Amazon Music, and other major platforms.</p>
+    <p>To set this up, message <b style="color:var(--text);">Underrated Music</b> with both of your details and the track info.</p>
+    <button class="btn btn-primary btn-block" data-action="close-deal" style="margin-top:6px;">Close</button>
+  </div>`;
+}
+
+/* ---------- MAIN APP ---------- */
+function renderMain(){
+  return `
+  <div class="screen">
+    ${renderTopbar()}
+    <div class="content">
+      ${state.viewProfileId ? renderProfileDetail(state.viewProfileId) : `
+      ${state.mainTab==='home' ? renderHome() : ''}
+      ${state.mainTab==='learn' ? renderLearn() : ''}
+      ${state.mainTab==='creation' ? renderCreation() : ''}
+      ${state.mainTab==='messages' ? renderMessages() : ''}
+      ${state.mainTab==='me' ? renderMe() : ''}
+      `}
+    </div>
+    ${renderBottomNav()}
+  </div>`;
+}
+
+function renderTopbar(){
+  const titles = { home:'UNDERRATED <span>MUSIC</span>', learn:'Learn', creation:'Creation Zone', messages:'Messages', me:'My Profile' };
+  return `
+  <div class="topbar">
+    <div class="logo">${state.mainTab==='home' ? titles.home : titles[state.mainTab]}</div>
+    <div class="icon-btn" data-action="go-messages">✉️</div>
+  </div>`;
+}
+
+function renderBottomNav(){
+  const items = [
+    ['home','🏠','Home'], ['learn','🎓','Learn'], ['creation','🎬','Creation'],
+    ['messages','💬','Messages'], ['me','👤','Me']
+  ];
+  return `<div class="bottom-nav">
+    ${items.map(([key,ic,label])=>`<button class="${state.mainTab===key?'active':''}" data-tab="${key}"><span class="ic">${ic}</span>${label}</button>`).join('')}
+  </div>`;
+}
+
+/* ---- HOME FEED ---- */
+function renderHome(){
+  const feed = oppositeFirstFeed();
+  const withPost = feed.filter(p=>p.hasPost);
+  const withoutPost = feed.filter(p=>!p.hasPost);
+  return `
+  <div class="section-title">For you</div>
+  ${(()=>{ const out=[]; let s=0;
+    withPost.forEach((p,i)=>{ out.push(feedCard(p)); if(i%2===1 && s<withoutPost.length) out.push(suggestRow(withoutPost[s++])); });
+    while(s<withoutPost.length) out.push(suggestRow(withoutPost[s++]));
+    return out.join(''); })()}
+  `;
+}
+function feedCard(p){
+  const isWT = state.workTogether.includes(p.id);
+  return `
+  <div class="card">
+    <div class="card-head">
+      <div class="avatar" style="overflow:hidden;cursor:pointer;" data-viewprofile="${p.id}">${avatarBadge(p.avatarEmoji, p.idx)}</div>
+      <div class="names" style="cursor:pointer;" data-viewprofile="${p.id}">
+        <b>${escapeHtml(p.penName)}</b>
+        <div class="cat ${roleClass(p.role)}">${escapeHtml(p.category)}</div>
+      </div>
+      <button class="work-btn ${isWT?'active':''}" data-work="${p.id}" data-caption="${escapeHtml(p.post ? p.post.caption : '')}">${isWT?'Working':'Work together'}</button>
+      <div class="msg-ic" data-openchat="${p.id}">💬</div>
+    </div>
+    <div class="media-box" style="overflow:hidden;cursor:pointer;" data-viewprofile="${p.id}">${coverArt(p.post.emoji, p.idx, {title: deriveTitle(p.post.caption), artist: p.penName})}</div>
+    <div class="media-caption"><b>${escapeHtml(p.penName)}</b> ${escapeHtml(p.post.caption)}</div>
+  </div>`;
+}
+function suggestRow(p){
+  const isWT = state.workTogether.includes(p.id);
+  return `
+  <div class="suggest-row">
+    <div class="avatar avatar-sm" style="overflow:hidden;cursor:pointer;" data-viewprofile="${p.id}">${avatarBadge(p.avatarEmoji, p.idx)}</div>
+    <div class="names" style="cursor:pointer;" data-viewprofile="${p.id}">
+      <b>${escapeHtml(p.penName)}</b>
+      <div class="cat ${roleClass(p.role)}">${escapeHtml(p.category)}</div>
+    </div>
+    <button class="work-btn ${isWT?'active':''}" data-work="${p.id}" data-caption="">${isWT?'Working':'Work together'}</button>
+    <div class="msg-ic" data-openchat="${p.id}">💬</div>
+  </div>`;
+}
+
+/* ---- PROFILE DETAIL ("their Me page") ---- */
+function renderProfileDetail(id){
+  const p = findProfileById(id);
+  if(!p) return `<div class="empty">Profile not found.</div>`;
+  const isWT = state.workTogether.includes(p.id);
+  return `
+  <div class="back-row">
+    <button class="back-btn" data-action="close-profile-detail">←</button>
+    <div style="font-weight:700;font-size:14px;">${escapeHtml(p.penName)}</div>
+  </div>
+  <div class="me-header">
+    <div class="avatar" style="overflow:hidden;">${avatarBadge(p.avatarEmoji, p.idx)}</div>
+    <div>
+      <p class="me-name">${escapeHtml(p.penName)}</p>
+      <p class="me-cat ${roleClass(p.role)}">${escapeHtml(p.category)}</p>
+    </div>
+  </div>
+  <div class="me-stats">
+    <div class="me-stat"><b>${p.hasPost ? 1 : 0}</b><span>Videos uploaded</span></div>
+    <div class="me-stat"><b>${roleLabel(p.role)}</b><span>Role</span></div>
+  </div>
+  <div class="me-section">
+    <h4>About</h4>
+    <div class="info-row"><span>Category</span><span>${escapeHtml(p.category)}</span></div>
+    <div class="info-row"><span>Bio</span><span style="text-align:right;max-width:60%;">${escapeHtml(p.bioPublicSnippet)}</span></div>
+  </div>
+  <div class="me-section">
+    <h4>Work</h4>
+    ${p.hasPost ? `
+      <div class="media-box" style="overflow:hidden;margin-bottom:10px;">${coverArt(p.post.emoji, p.idx, {title: deriveTitle(p.post.caption), artist: p.penName})}</div>
+      <div class="muted" style="font-size:13px;line-height:1.5;">${escapeHtml(p.post.caption)}</div>
+    ` : `<div class="muted" style="font-size:13px;">Nothing uploaded yet.</div>`}
+  </div>
+  <div class="pad" style="display:flex;gap:10px;">
+    <button class="btn btn-primary" style="flex:1;" data-work="${p.id}" data-caption="${escapeHtml(p.post ? p.post.caption : '')}">${isWT?'Working together':'Work together'}</button>
+    <button class="btn btn-outline" style="flex:1;" data-openchat="${p.id}">Message</button>
+  </div>
+  `;
+}
+
+/* ---- LEARN ---- */
+function renderLearn(){
+  const videos = state.learnVideos;
+  return `
+  <div class="training-cta" data-action="open-training">🎧 Training Zone — beats & walkthroughs</div>
+  <div class="beat-cta" data-action="open-beats">🎛️ Create your own beat</div>
+  <div class="section-title">Lessons</div>
+  ${videos.map(v=>`
+    <div class="lesson-card" data-lesson="${v.id}">
+      <div class="lesson-thumb" style="overflow:hidden;">${coverArt(v.emoji, hashIdx(v.id))}</div>
+      <div class="lesson-info">
+        <b>${escapeHtml(v.title)}</b>
+        <span>${escapeHtml(v.desc)}</span>
+        <div class="lock-chip ${v.premium?'premium':'free'}">${v.premium?'Premium':'Free'}</div>
+      </div>
+    </div>
+  `).join('')}
+  ${state.isAdmin ? `
+  <div class="pad">
+    <button class="btn btn-outline btn-block" data-action="admin-add-lesson">+ Upload a lesson (admin)</button>
+  </div>` : ''}
+  `;
+}
+
+/* ---- Training / beats overlay ---- */
+function renderTrainingOverlay(){
+  const beats = [...state.beats, ...state.myBeats];
+  return `
+  <div class="deal-overlay" id="training-overlay">
+    <div class="deal-sheet" style="max-height:88vh;">
+      <button class="close-x" data-action="close-training">✕</button>
+      <div class="deal-badge" style="background:rgba(140,124,255,.15);color:var(--violet);">🎧 TRAINING ZONE</div>
+      <h2>Audio editing walkthrough</h2>
+      <p>1. Set your project BPM before adding any loops.<br>
+      2. Sketch drums first, then bass, then melody.<br>
+      3. Leave headroom — mix under -6dB, master last.<br>
+      4. Reference a track you love in the same genre.</p>
+      <h2 style="font-size:17px;margin-top:22px;">Beats & BGMs</h2>
+      <p style="margin-bottom:14px;">Free and premium beats from our designers. Designers can upload their own — new uploads are reviewed before going live.</p>
+      ${beats.map(b=>`
+        <div class="beat-row" style="border-radius:10px;">
+          <div class="beat-wave" style="overflow:hidden;">${avatarBadge('🎵', hashIdx(b.id||b.name))}</div>
+          <div class="beat-info"><b>${escapeHtml(b.name)}</b><span>by ${escapeHtml(b.author)} · ${b.price==='free'?'Free':'Premium'}</span></div>
+          <div class="status-chip ${b.status}">${b.status}</div>
+        </div>
+      `).join('')}
+      ${(state.profile && (state.profile.role==='designer' || state.profile.role==='both')) ? `
+      <button class="btn btn-outline btn-block" style="margin-top:14px;" data-action="upload-beat">+ Upload a beat for review</button>
+      ` : ''}
+    </div>
+  </div>`;
+}
+
+/* ---- CREATION ZONE ---- */
+function renderCreation(){
+  return state.creation.map(c=>`
+    <div class="reel-card">
+      <div class="card-head" style="padding:14px 18px 0;">
+        <div class="avatar avatar-sm" style="overflow:hidden;cursor:pointer;" data-viewprofile-name="${escapeHtml(c.authorName)}">${avatarBadge(c.emoji, c.idx)}</div>
+        <div class="names" style="cursor:pointer;" data-viewprofile-name="${escapeHtml(c.authorName)}"><b>${escapeHtml(c.authorName)}</b><div class="cat ${roleClass(c.authorRole)}">${roleLabel(c.authorRole)}</div></div>
+      </div>
+      <div class="reel-media" style="margin:10px 18px;border-radius:14px;overflow:hidden;">${coverArt(c.emoji, c.idx, {title: deriveTitle(c.caption), artist: c.authorName})}</div>
+      <div class="reel-body">
+        <div class="media-caption">${escapeHtml(c.caption)}</div>
+        <div class="reel-actions">
+          <button class="btn btn-outline" data-work-creation="${c.id}">Work together</button>
+          <button class="btn btn-outline" data-openchat-name="${c.authorName}">Message</button>
+        </div>
+      </div>
+      <div class="comment-block">
+        ${c.comments.map(cm=>`<div class="comment-line"><b>${escapeHtml(cm.name)}</b>${linkifyDeal(cm.text)}</div>`).join('')}
+      </div>
+      <div class="comment-input-row">
+        <input placeholder="Add a comment..." data-comment-input="${c.id}">
+        <button data-comment-send="${c.id}">Post</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ---- MESSAGES ---- */
+function renderMessages(){
+  if(state.activeChatId){
+    return renderChatScreen(state.activeChatId);
+  }
+  const ids = Object.keys(state.chats);
+  if(ids.length === 0){
+    return `<div class="empty">No conversations yet.<br>Tap <b>Work together</b> on someone's post to start one.</div>`;
+  }
+  return ids.map(id=>{
+    const p = findProfileById(id);
+    if(!p) return '';
+    const msgs = state.chats[id];
+    const last = msgs[msgs.length-1];
+    return `
+    <div class="chat-row" data-openchat="${id}">
+      <div class="avatar avatar-sm" style="overflow:hidden;">${avatarBadge(p.avatarEmoji, p.idx)}</div>
+      <div class="names"><b>${escapeHtml(p.penName)}</b><div class="last">${escapeHtml(last ? (last.from==='me'?'You: ':'') + last.text : '')}</div></div>
+      <div class="chat-time">now</div>
+    </div>`;
+  }).join('');
+}
+function renderChatScreen(id){
+  const p = findProfileById(id);
+  if(!p) return `<div class="empty">Conversation not found.</div>`;
+  const msgs = state.chats[id] || [];
+  return `
+  <div class="chat-screen">
+    <div class="chat-header">
+      <button class="back-btn" data-action="close-chat">←</button>
+      <div class="avatar avatar-sm" style="overflow:hidden;">${avatarBadge(p.avatarEmoji, p.idx)}</div>
+      <b>${escapeHtml(p.penName)}</b>
+    </div>
+    <div class="chat-body" id="chat-body">
+      ${msgs.map(m=>`<div class="bubble ${m.from}">${linkifyDeal(m.text)}</div>`).join('')}
+    </div>
+    <div class="chat-input-row">
+      <input id="chat-input" placeholder="Message ${escapeHtml(p.penName)}...">
+      <button data-action="send-chat">➤</button>
+    </div>
+  </div>`;
+}
+
+/* ---- ME ---- */
+function renderMe(){
+  const prof = state.profile;
+  if(!prof) return `<div class="empty">No profile yet.</div>`;
+  const worksCount = prof.worksCount || 0;
+  return `
+  <div class="me-header">
+    <div class="avatar" style="overflow:hidden;">${prof.photo ? `<img src="${prof.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : avatarBadge(profileEmojiKey(prof), hashIdx(prof.name||'you'))}</div>
+    <div>
+      <p class="me-name">${escapeHtml(prof.penName || prof.name)}</p>
+      <p class="me-cat">${escapeHtml(prof.subroleLabel)} · ${roleLabel(prof.role)}</p>
+    </div>
+  </div>
+  <div class="me-stats">
+    <div class="me-stat"><b>${worksCount}</b><span>Videos uploaded</span></div>
+    <div class="me-stat"><b>${state.workTogether.length}</b><span>Work together</span></div>
+    <div class="me-stat"><b>${worksCount}</b><span>Score / Rank</span></div>
+  </div>
+  <div class="me-section">
+    <h4>About</h4>
+    <div class="info-row"><span>Name</span><span>${escapeHtml(prof.name)}</span></div>
+    <div class="info-row"><span>Handle</span><span>${escapeHtml(prof.handle || '—')}</span></div>
+    <div class="info-row"><span>Category</span><span>${escapeHtml(prof.subroleLabel)}</span></div>
+  </div>
+  <div class="me-section">
+    <h4>Your work</h4>
+    ${worksCount>0 ? `<div class="work-grid">${Array.from({length:worksCount}).map(()=>'<div class="work-cell">🎵</div>').join('')}</div>` : `<div class="muted" style="font-size:13px;">Nothing uploaded yet.</div>`}
+    <button class="btn btn-outline btn-block" style="margin-top:12px;" data-action="add-work">+ Upload work</button>
+  </div>
+  <div class="me-section">
+    <div class="admin-toggle">
+      <span>Admin mode <span class="muted">(manager only)</span></span>
+      <div class="switch ${state.isAdmin?'on':''}" data-action="toggle-admin"><div class="knob"></div></div>
+    </div>
+  </div>
+  <div class="reset-link" data-action="reset-demo">Reset demo data</div>
+  `;
+}
+
+/* ---------- DEAL OVERLAY (global, tappable anywhere) ---------- */
+function renderDealOverlay(){
+  return `<div class="deal-overlay" id="deal-overlay">${dealSheetMarkup(false)}</div>`;
+}
+function attachDealOverlayHandlers(){
+  const ov = document.getElementById('deal-overlay');
+  if(!ov) return;
+  ov.querySelectorAll('[data-action="close-deal"]').forEach(b=>b.addEventListener('click', ()=> setState({dealOverlay:false})));
+  ov.addEventListener('click', e=>{ if(e.target===ov) setState({dealOverlay:false}); });
+}
+function attachTrainingHandlers(){
+  const ov = document.getElementById('training-overlay');
+  if(!ov) return;
+  ov.querySelectorAll('[data-action="close-training"]').forEach(b=>b.addEventListener('click', ()=> setState({trainingOpen:false})));
+  ov.addEventListener('click', e=>{ if(e.target===ov) setState({trainingOpen:false}); });
+  const upBtn = ov.querySelector('[data-action="upload-beat"]');
+  if(upBtn) upBtn.addEventListener('click', ()=>{
+    const name = prompt('Name your beat:');
+    if(!name) return;
+    const priceRaw = prompt('Type "free" or "premium":','free');
+    const price = (priceRaw||'free').toLowerCase().includes('prem') ? 'premium' : 'free';
+    const beat = { id:uid(), name, author: state.profile ? (state.profile.penName||state.profile.name) : 'You', price, status:'pending' };
+    state.myBeats.push(beat);
+    saveState();
+    toast('Sent to Underrated Music for review');
+    render();
+    setTimeout(()=>{
+      const found = state.myBeats.find(b=>b.id===beat.id);
+      if(found){
+        const approved = Math.random() > 0.25;
+        found.status = approved ? 'approved' : 'rejected';
+        saveState();
+        toast(approved ? `"${name}" was approved and is now live` : `"${name}" wasn't approved — audio quality needs work`);
+        render();
+        reopenTraining();
+      }
+    }, 2600);
+  });
+}
+function reopenTraining(){ setState({trainingOpen:true}); }
+
+/* ---------- event wiring ---------- */
+function attachHandlers(){
+  // onboarding
+  frame.querySelectorAll('.who-opt').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      draftProfile = { photo:null, name:'', penName:'', subrole:null, subroleOther:'', handle:'', bio:'', workNote:'' };
+      formErrors = {};
+      setState({ screen:'profile', onboardRole: el.dataset.role });
+    });
+  });
+
+  // profile form
+  const backBtn = frame.querySelector('[data-action="back-onboard"]');
+  if(backBtn) backBtn.addEventListener('click', ()=> setState({ screen:'onboarding' }));
+
+  const photoUp = frame.querySelector('#photo-upload');
+  if(photoUp){
+    photoUp.addEventListener('click', ()=> frame.querySelector('#photo-input').click());
+    frame.querySelector('#photo-input').addEventListener('change', e=>{
+      const file = e.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{ draftProfile.photo = reader.result; render(); };
+      reader.readAsDataURL(file);
+    });
+  }
+  const nameInp = frame.querySelector('#f-name');
+  if(nameInp) nameInp.addEventListener('input', e=> draftProfile.name = e.target.value);
+  const penInp = frame.querySelector('#f-penname');
+  if(penInp) penInp.addEventListener('input', e=> draftProfile.penName = e.target.value);
+  const handleInp = frame.querySelector('#f-handle');
+  if(handleInp) handleInp.addEventListener('input', e=> draftProfile.handle = e.target.value);
+  const workInp = frame.querySelector('#f-work');
+  if(workInp) workInp.addEventListener('input', e=> draftProfile.workNote = e.target.value);
+  const bioInp = frame.querySelector('#f-bio');
+  if(bioInp) bioInp.addEventListener('input', e=> draftProfile.bio = e.target.value);
+  const subOtherInp = frame.querySelector('#f-subother');
+  if(subOtherInp) subOtherInp.addEventListener('input', e=> draftProfile.subroleOther = e.target.value);
+
+  frame.querySelectorAll('[data-sub]').forEach(el=>{
+    el.addEventListener('click', ()=>{ draftProfile.subrole = el.dataset.sub; render(); });
+  });
+
+  const submitBtn = frame.querySelector('#submit-profile');
+  if(submitBtn) submitBtn.addEventListener('click', submitProfile);
+
+  // main tabs
+  frame.querySelectorAll('[data-tab]').forEach(el=>{
+    el.addEventListener('click', ()=> setState({ mainTab: el.dataset.tab, activeChatId:null, viewProfileId:null }));
+  });
+  const msgIcon = frame.querySelector('[data-action="go-messages"]');
+  if(msgIcon) msgIcon.addEventListener('click', ()=> setState({ mainTab:'messages', activeChatId:null, viewProfileId:null }));
+
+  // deal screen (standalone)
+  frame.querySelectorAll('[data-action="close-deal"]').forEach(b=> b.addEventListener('click', ()=> setState({ screen:'main
