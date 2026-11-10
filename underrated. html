@@ -1376,4 +1376,210 @@ function attachHandlers(){
   if(msgIcon) msgIcon.addEventListener('click', ()=> setState({ mainTab:'messages', activeChatId:null, viewProfileId:null }));
 
   // deal screen (standalone)
-  frame.querySelectorAll('[data-action="close-deal"]').forEach(b=> b.addEventListener('click', ()=> setState({ screen:'main
+  frame.querySelectorAll('[data-action="close-deal"]').forEach(b=> b.addEventListener('click', ()=> setState({ screen:'main', mainTab:'home' })));
+
+  // work together
+  frame.querySelectorAll('[data-work]').forEach(el=>{
+    el.addEventListener('click', ()=> handleWorkTogether(el.dataset.work, el.dataset.caption||''));
+  });
+  frame.querySelectorAll('[data-work-creation]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const c = state.creation.find(x=>x.id===el.dataset.workCreation);
+      toast(`Sent a work-together request to ${c ? c.authorName : 'creator'}`);
+    });
+  });
+
+  // view full profile ("their Me page")
+  frame.querySelectorAll('[data-viewprofile]').forEach(el=>{
+    el.addEventListener('click', ()=> setState({ viewProfileId: el.dataset.viewprofile }));
+  });
+  frame.querySelectorAll('[data-viewprofile-name]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const p = state.dummies.find(d=>d.penName===el.dataset.viewprofileName);
+      if(p) setState({ viewProfileId: p.id });
+    });
+  });
+  const closeProfileBtn = frame.querySelector('[data-action="close-profile-detail"]');
+  if(closeProfileBtn) closeProfileBtn.addEventListener('click', ()=> setState({ viewProfileId:null }));
+
+  // open chat
+  frame.querySelectorAll('[data-openchat]').forEach(el=>{
+    el.addEventListener('click', ()=> setState({ mainTab:'messages', activeChatId: el.dataset.openchat, viewProfileId:null }));
+  });
+  frame.querySelectorAll('[data-openchat-name]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const p = state.dummies.find(d=>d.penName===el.dataset.openchatName);
+      if(p) setState({ mainTab:'messages', activeChatId: p.id, viewProfileId:null });
+    });
+  });
+  const closeChatBtn = frame.querySelector('[data-action="close-chat"]');
+  if(closeChatBtn) closeChatBtn.addEventListener('click', ()=> setState({ activeChatId:null }));
+
+  const sendChatBtn = frame.querySelector('[data-action="send-chat"]');
+  if(sendChatBtn){
+    sendChatBtn.addEventListener('click', sendChatMessage);
+    const inp = frame.querySelector('#chat-input');
+    if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter') sendChatMessage(); });
+  }
+  const chatBody = frame.querySelector('#chat-body');
+  if(chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+  frame.querySelectorAll('[data-open-deal]').forEach(el=>{
+    el.addEventListener('click', ()=> setState({ dealOverlay:true }));
+  });
+
+  // learn
+  const trainingCta = frame.querySelector('[data-action="open-training"]');
+  if(trainingCta) trainingCta.addEventListener('click', ()=> setState({ trainingOpen:true }));
+  frame.querySelectorAll('[data-lesson]').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const v = state.learnVideos.find(x=>x.id===el.dataset.lesson);
+      if(!v) return;
+      if(v.premium){ toast('This lesson is premium — unlock it to watch.'); }
+      else { toast(`Playing: ${v.title}`); }
+    });
+  });
+  const adminAddLesson = frame.querySelector('[data-action="admin-add-lesson"]');
+  if(adminAddLesson) adminAddLesson.addEventListener('click', ()=>{
+    const title = prompt('Lesson title:');
+    if(!title) return;
+    const isPremium = confirm('Make this a premium lesson? OK = premium, Cancel = free');
+    state.learnVideos.push({ id:uid(), title, desc:'Uploaded by admin', emoji:'🎬', premium:isPremium });
+    saveState(); render();
+    toast('Lesson published');
+  });
+
+  // creation comments
+  frame.querySelectorAll('[data-comment-send]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const cid = btn.dataset.commentSend;
+      const input = frame.querySelector(`[data-comment-input="${cid}"]`);
+      const text = input.value.trim();
+      if(!text) return;
+      const c = state.creation.find(x=>x.id===cid);
+      c.comments.push({ name: state.profile ? (state.profile.penName||state.profile.name) : 'You', text });
+      saveState(); render();
+    });
+  });
+
+  // me page
+  const toggleAdmin = frame.querySelector('[data-action="toggle-admin"]');
+  if(toggleAdmin) toggleAdmin.addEventListener('click', ()=> setState({ isAdmin: !state.isAdmin }));
+  const addWork = frame.querySelector('[data-action="add-work"]');
+  if(addWork) addWork.addEventListener('click', ()=>{
+    if(!state.profile) return;
+    state.profile.worksCount = (state.profile.worksCount||0) + 1;
+    saveState(); render();
+    toast('Work uploaded');
+  });
+  const resetLink = frame.querySelector('[data-action="reset-demo"]');
+  if(resetLink) resetLink.addEventListener('click', ()=>{
+    if(confirm('Reset all demo data? This clears your profile, chats and uploads.')){
+      localStorage.removeItem(STORE_KEY);
+      location.reload();
+    }
+  });
+}
+
+function handleWorkTogether(id, caption){
+  if(state.workTogether.includes(id)){ toast('Already working together'); return; }
+  const p = findProfileById(id);
+  if(!p) return;
+  state.workTogether.push(id);
+  const myCategory = state.profile ? state.profile.subroleLabel : 'creator';
+  const introText = `Hello, I am ${myCategory}${caption ? ' and I want to work with you on this: "'+caption+'"' : ' and I would love to work together!'}`;
+  if(!state.chats[id]) state.chats[id] = [];
+  state.chats[id].push({ from:'me', text: introText });
+  saveState();
+  render();
+  toast(`Request sent to ${p.penName}`);
+  setTimeout(()=>{
+    if(!state.chats[id]) return;
+    const replies = [
+      "Hey! Thanks for reaching out — let's talk details.",
+      "Love the energy, send me what you've got so far.",
+      "I'm in. Can't pay upfront though, maybe we do a 50-50 on this one?",
+      "Sounds good, drop your reference track and I'll get back to you."
+    ];
+    state.chats[id].push({ from:'them', text: replies[Math.floor(Math.random()*replies.length)] });
+    saveState();
+    if(state.mainTab==='messages' && state.activeChatId===id) render();
+  }, 1600);
+}
+
+function sendChatMessage(){
+  const inp = frame.querySelector('#chat-input');
+  if(!inp) return;
+  const text = inp.value.trim();
+  if(!text) return;
+  const id = state.activeChatId;
+  if(!state.chats[id]) state.chats[id] = [];
+  state.chats[id].push({ from:'me', text });
+  saveState();
+  render();
+  const body = frame.querySelector('#chat-body');
+  if(body) body.scrollTop = body.scrollHeight;
+}
+
+function submitProfile(){
+  formErrors = {};
+  if(!draftProfile.name.trim()) formErrors.name = true;
+  if(!draftProfile.subrole) formErrors.subrole = true;
+  if(Object.keys(formErrors).length){ render(); return; }
+
+  const subLabels = (state.onboardRole==='designer') ? DESIGNER_CATS : WRITER_CATS;
+  const subroleLabel = draftProfile.subrole==='d' ? (draftProfile.subroleOther || 'Other') : subLabels[draftProfile.subrole];
+
+  const profile = {
+    photo: draftProfile.photo,
+    name: draftProfile.name.trim(),
+    penName: draftProfile.penName.trim() || draftProfile.name.trim(),
+    role: state.onboardRole,
+    subroleLabel,
+    handle: draftProfile.handle.trim(),
+    workNote: draftProfile.workNote.trim(),
+    bio: draftProfile.bio.trim(), // private — manager-only in a real deployment
+    worksCount: draftProfile.workNote.trim() ? 1 : 0,
+  };
+  setState({ profile, screen:'deal', dealOverlay:false });
+}
+
+render();
+
+/* ===== Premium 3D layer: tilt + vinyl (visual only) ===== */
+(function(){
+  try{
+    if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const fr = document.getElementById('frame'); if(!fr) return;
+    const SEL = '.who-opt,.card,.lesson-card,.reel-card';
+    const tilt = (e)=>{
+      const t = e.target.closest && e.target.closest(SEL); if(!t) return;
+      const r = t.getBoundingClientRect(), x=(e.clientX-r.left)/r.width, y=(e.clientY-r.top)/r.height;
+      t.style.setProperty('--ry', ((x-.5)*8).toFixed(2)+'deg');
+      t.style.setProperty('--rx', ((.5-y)*8).toFixed(2)+'deg');
+      t.style.setProperty('--mx', (x*100).toFixed(1)+'%');
+      t.style.setProperty('--my', (y*100).toFixed(1)+'%');
+      t.classList.add('is-tilt');
+    };
+    const reset = (e)=>{
+      const t = e.target.closest && e.target.closest(SEL); if(!t) return;
+      t.style.setProperty('--rx','0deg'); t.style.setProperty('--ry','0deg'); t.classList.remove('is-tilt');
+    };
+    fr.addEventListener('pointermove', tilt);
+    fr.addEventListener('pointerdown', tilt);
+    fr.addEventListener('pointerout', reset);
+    fr.addEventListener('pointerup', reset);
+    fr.addEventListener('pointercancel', reset);
+    const addVinyl = ()=>{
+      const h = fr.querySelector('.onb-hero');
+      if(h && !h.querySelector('.vinyl')){ const v=document.createElement('div'); v.className='vinyl'; v.setAttribute('aria-hidden','true'); h.prepend(v); }
+    };
+    new MutationObserver(addVinyl).observe(fr,{childList:true});
+    addVinyl();
+  }catch(err){ console.warn('3D layer skipped', err); }
+})();
+</script>
+
+<script>
+/* ===== Create your own beat: opens the embedded "Creating Beats" page ===== */
+(function(){
+  var BEATS_HTML = "<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n<title>Creating Beats<\/title>\n<link href=\"https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap\" rel=\"stylesheet\">\n<style>\n:root{--bg:#0b0b0d;--s1:#121215;--s2:#18181d;--ln:rgba(255,255,255,.07);--ln2:rgba(255,255,255,.16);--tx:#ecebe6;--mut:#7e7e89;--acc:#d4b06a;--acc2:#f0d79b;--lw:100px;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}\nhtml{scroll-padding-top:env(safe-area-inset-top,0px)}\n*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}\n[hidden]{display:none!important}\nbody{margin:0 auto;max-width:960px;background:var(--bg);color:var(--tx);font:500 14px/1.35 Manrope,system-ui,-apple-system,sans-serif;font-variant-numeric:tabular-nums}\nbutton{font:inherit;color:inherit;background:none;border:0;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none}\nbutton:active{opacity:.7}\nbutton:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}\nsvg{width:22px;height:22px;fill:currentColor;display:block;margin:auto}\nheader{padding:22px 18px 16px;display:flex;align-items:baseline;justify-content:space-between;gap:12px}\nh1{margin:0;font:800 clamp(22px,6.4vw,30px)/1 Manrope,sans-serif;letter-spacing:-.03em}\n#sub{margin:0;font-size:12px;color:var(--mut);white-space:nowrap}\n.vz{position:relative;margin:0 12px;height:196px;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#14141a,#0d0d11);border:1px solid var(--ln)}\n#vc{width:100%;height:100%;display:block}\n#bass{position:absolute;right:16px;top:12px;font:800 11px/1 Manrope,sans-serif;letter-spacing:.16em;color:var(--acc);transform-origin:right top;pointer-events:none}\n.sk{padding:16px 18px 0}\n.sk input{width:100%}\n.tm{display:flex;justify-content:space-between;font-size:12px;color:var(--mut);margin-top:2px}\ninput[type=range]{-webkit-appearance:none;appearance:none;background:transparent;height:26px;margin:0;--p:0%}\ninput[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:3px;background:linear-gradient(90deg,var(--acc) var(--p),rgba(255,255,255,.14) var(--p))}\ninput[type=range]::-moz-range-track{height:3px;border-radius:3px;background:
