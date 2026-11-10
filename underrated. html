@@ -600,4 +600,361 @@ function loadState(){
   return null;
 }
 function saveState(){
-  try{ localStorage.setItem(STORE_KEY, J
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e){ console.error('save failed', e); }
+}
+
+/* ---------- icon / cover-art system (custom-drawn, no external images) ---------- */
+const ICON_PATHS = {
+  mic:      '<rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
+  headphones:'<path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="2" y="14" width="5" height="7" rx="2"/><rect x="17" y="14" width="5" height="7" rx="2"/>',
+  keys:     '<rect x="3" y="6" width="18" height="12" rx="1.5"/><line x1="7.5" y1="6" x2="7.5" y2="14"/><line x1="12" y1="6" x2="12" y2="14"/><line x1="16.5" y1="6" x2="16.5" y2="14"/>',
+  drum:     '<ellipse cx="12" cy="7" rx="8" ry="3"/><path d="M4 7v8c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/>',
+  guitar:   '<circle cx="8" cy="16" r="5"/><line x1="11" y1="12.5" x2="19" y2="4.5"/><line x1="17" y1="2.5" x2="21" y2="6.5"/>',
+  mixer:    '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="10" r="2"/><circle cx="16" cy="14" r="2"/><line x1="8" y1="4" x2="8" y2="8"/><line x1="16" y1="16" x2="16" y2="20"/>',
+  horn:     '<path d="M3 10v4h6l8 4V6l-8 4H3z"/><path d="M19 9a3 3 0 0 1 0 6"/>',
+  wave:     '<line x1="3" y1="10" x2="3" y2="14"/><line x1="7" y1="6" x2="7" y2="18"/><line x1="11" y1="9" x2="11" y2="15"/><line x1="15" y1="4" x2="15" y2="20"/><line x1="19" y1="8" x2="19" y2="16"/>',
+  bolt:     '<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>',
+  flame:    '<path d="M12 2c3 4 6 6.5 6 11a6 6 0 0 1-12 0c0-1.8.8-3 1.8-4 .1 1.8 1 2.8 2 2.8-.4-3-.6-5.8 2.2-9.8z"/>',
+  moon:     '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/>',
+  spark:    '<path d="M12 2l2 7h7l-5.5 4.5L17 21l-5-4-5 4 1.5-7.5L3 9h7z"/>',
+  cap:      '<path d="M4 15a8 8 0 0 1 16 0"/><path d="M2 15h20"/><rect x="9" y="4" width="6" height="4" rx="1"/>',
+  play:     '<circle cx="12" cy="12" r="9"/><polygon points="10,8 16,12 10,16"/>',
+  pencil:   '<path d="M3 21l4-1 11-11-3-3L4 17z"/><path d="M14 6l3 3"/>',
+};
+const EMOJI_ICON_MAP = {
+  '🎤':'mic', '🎧':'headphones', '🎹':'keys', '🥁':'drum', '🎸':'guitar',
+  '🎛️':'mixer', '🪕':'guitar', '🎺':'horn', '🎷':'horn', '🌀':'wave',
+  '⚡':'bolt', '🔥':'flame', '🌙':'moon', '💫':'spark', '🧢':'cap',
+  '🎵':'wave', '🎬':'play', '📝':'pencil', '🎚️':'mixer', '📻':'wave',
+};
+const GRADIENTS = [
+  'linear-gradient(135deg,#E8A33D,#C9720F)',
+  'linear-gradient(135deg,#8C7CFF,#4C3ED9)',
+  'linear-gradient(135deg,#FF6FA5,#C23E74)',
+  'linear-gradient(135deg,#5FBF8F,#2C8560)',
+  'linear-gradient(135deg,#FF9457,#E85D5D)',
+  'linear-gradient(135deg,#4CC3D9,#3A6FC9)',
+  'linear-gradient(135deg,#B98CFF,#7C4FE0)',
+  'linear-gradient(135deg,#E8C23D,#E8703D)',
+];
+function hashIdx(str){
+  let h = 0;
+  for(let i=0;i<(str||'').length;i++) h = (h*31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+function iconGlyph(emojiKey, iconSizePct){
+  const iconName = EMOJI_ICON_MAP[emojiKey] || 'wave';
+  return `<svg viewBox="0 0 24 24" width="${iconSizePct}" height="${iconSizePct}" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[iconName]}</svg>`;
+}
+/* Circular avatar badge: gradient background + line-icon, fully self-contained (no external images) */
+function avatarBadge(emojiKey, idx){
+  const grad = GRADIENTS[Math.abs(idx||0) % GRADIENTS.length];
+  return `<div style="width:100%;height:100%;border-radius:50%;background:${grad};display:flex;align-items:center;justify-content:center;">${iconGlyph(emojiKey,'52%')}</div>`;
+}
+/* Larger "cover art" panel for posts/reels: gradient + soft highlight + centered icon + waveform footer */
+function deriveTitle(text){
+  const words = (text||'').trim().split(/\s+/).filter(Boolean);
+  if(!words.length) return 'Untitled';
+  let t = words.slice(0,4).join(' ');
+  if(words.length > 4) t += '…';
+  return t;
+}
+function coverArt(emojiKey, idx, opts){
+  opts = opts || {};
+  const grad = GRADIENTS[Math.abs(idx||0) % GRADIENTS.length];
+  const hasText = !!opts.title;
+  return `<div style="width:100%;height:100%;position:relative;background:radial-gradient(circle at 26% 20%, rgba(255,255,255,.22), transparent 55%), ${grad};display:flex;align-items:center;justify-content:center;overflow:hidden;">
+    <div style="position:absolute;inset:0;opacity:.12;background:repeating-linear-gradient(115deg, transparent 0 18px, #fff 18px 19px);"></div>
+    <div style="position:absolute;width:58%;aspect-ratio:1;border-radius:50%;border:1.5px solid rgba(255,255,255,.28);"></div>
+    <div style="position:absolute;width:41%;aspect-ratio:1;border-radius:50%;border:1.5px solid rgba(255,255,255,.22);"></div>
+    <div style="position:relative;width:30%;aspect-ratio:1;border-radius:50%;background:rgba(0,0,0,.28);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 18px rgba(0,0,0,.25);">
+      ${iconGlyph(emojiKey,'58%')}
+    </div>
+    ${hasText ? `
+    <div style="position:absolute;left:0;right:0;bottom:0;padding:16px 14px 12px;background:linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,.15) 70%, transparent);">
+      <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;color:#fff;line-height:1.25;">${escapeHtml(opts.title)}</div>
+      <div style="font-size:11.5px;color:rgba(255,255,255,.72);margin-top:2px;">${escapeHtml(opts.artist||'')}</div>
+    </div>` : `
+    <div style="position:absolute;bottom:10px;left:14px;right:14px;display:flex;align-items:flex-end;gap:3px;height:14px;opacity:.5;">
+      ${[6,11,15,9,13,7,12,5].map(h=>`<div style="flex:1;background:#fff;border-radius:2px;height:${h}px;"></div>`).join('')}
+    </div>`}
+  </div>`;
+}
+
+/* ---------- dummy seed data ---------- */
+const DUMMY_AVATARS = ['🎤','🎧','🎹','🥁','🎸','🎛️','🪕','🎺','🎷','🌀','⚡','🔥','🌙','💫','🧢'];
+const WRITER_CATS = { a:'Rapper', b:'Singer', c:'Rapper & Singer', d:'Songwriter' };
+const DESIGNER_CATS = { a:'Hip-Hop Designer', b:'Song Designer', c:'Both', d:'Sound Designer' };
+
+function seedDummies(){
+  const names = [
+    ['Kavi Raw','rapper','a','Streets never sleep and neither do I. Been rapping since 15.','🎤'],
+    ['Mehak Tunes','singer','b','Sad girl anthems with a party twist.','🌙'],
+    ['Zuben Bars','both','c','Bars in the morning, hooks by night.','🔥'],
+    ['Nyla Verse','writer','d','Poetry-first songwriter, love metaphors.','💫'],
+    ['DJ Kohra','designer','a','Dark trap beats, FL Studio native.','🎛️'],
+    ['Prod. Anay','designer','b','Sad-song specialist, piano loops my thing.','🎹'],
+    ['Rhea Mix','designer','c','Full production — mixing, mastering, beats.','🌀'],
+    ['Sound by Ilm','designer','d','Experimental textures, foley, ambient layers.','⚡'],
+    ['Tashi Flow','rapper','a','Freestyle king from the underground scene.','🎤'],
+    ['Ojas Kahaani','both','c','I write the story and produce it too.','🧢'],
+    ['Meher Notes','singer','b','Party anthems, festival-ready hooks.','🎷'],
+    ['Beatz by Rohan','designer','a','Hip-hop drums that hit different.','🥁'],
+    ['Aariv Lines','writer','d','Punchlines over everything.','🎺'],
+    ['Studio Naaz','designer','c','Your one-stop DAW wizard.','🪕'],
+  ];
+  return names.map((n,i)=>{
+    const isDesigner = n[4] ? false : false;
+    const roleGuess = ['DJ Kohra','Prod. Anay','Rhea Mix','Sound by Ilm','Beatz by Rohan','Studio Naaz'].includes(n[0]) ? 'designer' : (n[1]==='both' ? 'both' : 'writer');
+    const hasPost = i % 3 !== 2; // most have a post, some don't (id type y)
+    return {
+      id: 'd_'+i,
+      idx: i,
+      isDummy:true,
+      role: roleGuess,
+      penName: n[0],
+      category: roleGuess==='writer' ? WRITER_CATS[n[2]] : (roleGuess==='designer' ? DESIGNER_CATS[n[2]] : (WRITER_CATS[n[2]]+' / '+DESIGNER_CATS[n[2]])),
+      avatarEmoji: n[5],
+      bioPublicSnippet: n[3],
+      hasPost,
+      post: hasPost ? {
+        emoji: n[5],
+        caption: roleGuess==='designer'
+          ? 'New beat pack just dropped — link in bio. Looking for a writer to bounce ideas with.'
+          : 'Fresh 16 bars, need a producer who gets the vibe. Who wants to collab?'
+      } : null,
+      works: hasPost ? [{type:'text', title:'Untitled Session'}] : [],
+    };
+  });
+}
+
+const LEARN_VIDEOS_SEED = [
+  { id:'lv1', title:'Getting Started with FL Studio', desc:'Interface tour + first beat', emoji:'🎬', premium:false },
+  { id:'lv2', title:'Writing Your First Hook', desc:'Structure, rhyme, delivery', emoji:'📝', premium:false },
+  { id:'lv3', title:'Mixing Vocals Like a Pro', desc:'EQ, compression, reverb chains', emoji:'🎚️', premium:true },
+  { id:'lv4', title:'Mastering for Streaming', desc:'Loudness targets for Spotify/YT', emoji:'📻', premium:true },
+  { id:'lv5', title:'Building a Trap Drum Pattern', desc:'Groove, swing, layering', emoji:'🥁', premium:false },
+];
+
+const BEATS_SEED = [
+  { id:'b1', name:'Midnight Drift', author:'DJ Kohra', price:'free', status:'approved' },
+  { id:'b2', name:'Rooftop Sadness', author:'Prod. Anay', price:'premium', status:'approved' },
+  { id:'b3', name:'Static Bloom', author:'Sound by Ilm', price:'premium', status:'approved' },
+  { id:'b4', name:'Concrete Anthem', author:'Beatz by Rohan', price:'free', status:'approved' },
+];
+
+const CREATION_SEED = [
+  {
+    id:'c1', idx:2, authorName:'Zuben Bars', authorRole:'both', emoji:'🔥',
+    caption:'Verse 2 hit different at 2am. Full track coming with whoever wants to work together on the hook.',
+    comments:[
+      {name:'Rhea Mix', text:'This is fire. Down to produce it — hit my DM.'},
+      {name:'Nyla Verse', text:'If you cannot pay upfront we can always do a 50-50 on this one.'},
+    ]
+  },
+  {
+    id:'c2', idx:4, authorName:'DJ Kohra', authorRole:'designer', emoji:'🎛️',
+    caption:'New dark trap loop, 140 BPM. Free for anyone who wants to write over it — tag me when it drops.',
+    comments:[
+      {name:'Tashi Flow', text:'Sending you 16 bars tonight.'},
+      {name:'Meher Notes', text:'Would you do a 50_50 deal on distribution if I sing the hook?'},
+    ]
+  },
+  {
+    id:'c3', idx:9, authorName:'Ojas Kahaani', authorRole:'both', emoji:'🧢',
+    caption:'Wrote and produced this one solo. Feedback welcome — what should the next single be about?',
+    comments:[
+      {name:'Studio Naaz', text:'The low end on this is clean. What plugin chain?'},
+    ]
+  },
+];
+
+/* ---------- state ---------- */
+let state = loadState();
+if(!state){
+  state = {
+    screen: 'onboarding',       // onboarding | profile | deal | main
+    mainTab: 'home',            // home | learn | creation | messages | me
+    onboardRole: null,          // writer | designer | both
+    profile: null,              // current user's profile object
+    dummies: seedDummies(),
+    workTogether: [],           // ids the user tapped "work together" on
+    chats: {},                  // id -> [{from, text, time}]
+    activeChatId: null,
+    learnVideos: LEARN_VIDEOS_SEED,
+    beats: BEATS_SEED,
+    myBeats: [],                // beats uploaded by current user, pending/approved/rejected
+    creation: CREATION_SEED.map(c=>({...c, comments:[...c.comments]})),
+    myWorksCount: 0,
+    isAdmin: false,
+    trainingOpen: false,
+    dealOverlay: false,
+    activeLesson: null,
+  };
+  saveState();
+}
+// migrate older saved demo data that predates the idx/icon system
+if(!state.dummies || !state.dummies.length || state.dummies[0].idx === undefined){
+  state.dummies = seedDummies();
+}
+if(!state.creation || !state.creation.length || state.creation[0].idx === undefined){
+  state.creation = CREATION_SEED.map(c=>({...c, comments:[...c.comments]}));
+}
+if(!state.chats) state.chats = {};
+if(!state.myBeats) state.myBeats = [];
+if(!state.isAdmin) state.isAdmin = false;
+
+function setState(patch){
+  Object.assign(state, patch);
+  saveState();
+  render();
+}
+
+/* ---------- toast ---------- */
+function toast(msg){
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  setTimeout(()=>{ el.classList.remove('show'); setTimeout(()=> el.remove(), 300); }, 2200);
+}
+
+/* ---------- helpers ---------- */
+function escapeHtml(str){
+  return (str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function linkifyDeal(text){
+  const escaped = escapeHtml(text);
+  return escaped.replace(/(50[-_. ]?50|50%)/gi, '<span class="deal-link" data-open-deal="1">$1</span>');
+}
+function allProfiles(){
+  return state.dummies;
+}
+function oppositeFirstFeed(){
+  const mine = state.profile ? state.profile.role : 'writer';
+  const opposite = mine === 'writer' ? 'designer' : (mine === 'designer' ? 'writer' : null);
+  const list = [...state.dummies];
+  list.sort((a,b)=>{
+    const aScore = opposite ? (a.role===opposite?0:(a.role==='both'?1:2)) : 0;
+    const bScore = opposite ? (b.role===opposite?0:(b.role==='both'?1:2)) : 0;
+    return aScore - bScore;
+  });
+  return list;
+}
+function findProfileById(id){
+  return state.dummies.find(d=>d.id===id) || null;
+}
+function roleClass(role){
+  return role==='designer' ? 'tag-designer' : (role==='both' ? 'tag-both' : 'tag-writer');
+}
+function roleLabel(role){
+  return role==='designer' ? 'Music Designer' : (role==='both' ? 'Writer & Designer' : 'Lyricist / Rapper');
+}
+function profileEmojiKey(prof){
+  const s = (prof.subroleLabel||'').toLowerCase();
+  if(prof.role === 'designer'){
+    if(s.includes('hip-hop')) return '🥁';
+    if(s.includes('song designer')) return '🎹';
+    if(s.includes('both')) return '🎛️';
+    return '⚡';
+  }
+  if(s.includes('rapper') && s.includes('singer')) return '🔥';
+  if(s.includes('rapper')) return '🎤';
+  if(s.includes('singer')) return '🌙';
+  return '💫';
+}
+
+/* ---------- rendering ---------- */
+const frame = document.getElementById('frame');
+
+function render(){
+  let html = '';
+  if(state.screen === 'onboarding') html = renderOnboarding();
+  else if(state.screen === 'profile') html = renderProfileForm();
+  else if(state.screen === 'deal') html = renderDealScreen();
+  else html = renderMain();
+  frame.innerHTML = html;
+  attachHandlers();
+  if(state.dealOverlay){
+    frame.insertAdjacentHTML('beforeend', renderDealOverlay());
+    attachDealOverlayHandlers();
+  }
+  if(state.trainingOpen){
+    frame.insertAdjacentHTML('beforeend', renderTrainingOverlay());
+    attachTrainingHandlers();
+  }
+}
+
+/* ---------- ONBOARDING ---------- */
+function renderOnboarding(){
+  return `
+  <div class="screen onb-hero">
+    <div class="onb-logo">UNDERRATED MUSIC</div>
+    <h1 class="onb-title">Who are you?</h1>
+    <p class="onb-sub">Tell us your role so we can connect you with the right people.</p>
+    <div class="who-opt" data-role="writer">
+      <div class="ico" style="background:rgba(232,163,61,.15);color:var(--gold);">🎤</div>
+      <div class="body"><b>I write lyrics / songs</b><span>Rapper, songwriter, or vocalist</span></div>
+    </div>
+    <div class="who-opt" data-role="designer">
+      <div class="ico" style="background:rgba(140,124,255,.15);color:var(--violet);">🎛️</div>
+      <div class="body"><b>I design music</b><span>Producer / editor — FL Studio, DAW</span></div>
+    </div>
+    <div class="who-opt" data-role="both">
+      <div class="ico" style="background:rgba(95,191,143,.15);color:var(--green);">🎼</div>
+      <div class="body"><b>I do both</b><span>Writing and producing</span></div>
+    </div>
+  </div>`;
+}
+
+/* ---------- PROFILE FORM ---------- */
+let draftProfile = { photo:null, name:'', penName:'', subrole:null, subroleOther:'', handle:'', bio:'', workNote:'' };
+let formErrors = {};
+
+function renderProfileForm(){
+  const isWriter = state.onboardRole === 'writer';
+  const isBoth = state.onboardRole === 'both';
+  const subOpts = isWriter || isBoth
+    ? [['a','Rapper'],['b','Singer — sad / party songs'],['c','Both'],['d','Something else']]
+    : [['a','Hip-hop designer'],['b','Song designer — sad / party songs'],['c','Both'],['d','Something else']];
+
+  return `
+  <div class="screen">
+    <div class="back-row">
+      <button class="back-btn" data-action="back-onboard">←</button>
+      <div style="font-weight:700;font-size:14px;">${isWriter ? 'Lyricist / Songwriter profile' : (isBoth ? 'Writer & Designer profile' : 'Music Designer profile')}</div>
+    </div>
+    <div class="pad" style="flex:1;overflow-y:auto;">
+      <div class="upload-box" id="photo-upload" style="margin-bottom:18px;">
+        ${draftProfile.photo ? `<img src="${draftProfile.photo}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;">` : `<div style="font-size:28px;margin-bottom:6px;">📷</div><div class="muted" style="font-size:13px;">Upload a photo</div>`}
+        <input type="file" id="photo-input" accept="image/*" style="display:none;">
+      </div>
+
+      <div class="field ${formErrors.name?'error':''}">
+        <label>Your name *</label>
+        <input id="f-name" value="${escapeHtml(draftProfile.name)}" placeholder="e.g. Aarav Sharma">
+        <div class="err-msg">Please enter your name.</div>
+      </div>
+
+      <div class="field">
+        <label>Your pen name</label>
+        <input id="f-penname" value="${escapeHtml(draftProfile.penName)}" placeholder="e.g. Kavi Raw">
+      </div>
+
+      <div class="field ${formErrors.subrole?'error':''}">
+        <label>You are a *</label>
+        <div class="pill-row" id="subrole-pills">
+          ${subOpts.map(([k,label])=>`<div class="pill ${draftProfile.subrole===k?'selected':''}" data-sub="${k}">${label}</div>`).join('')}
+        </div>
+        ${draftProfile.subrole==='d' ? `<input id="f-subother" style="margin-top:10px;" placeholder="Describe your type" value="${escapeHtml(draftProfile.subroleOther)}">` : ''}
+        <div class="err-msg">Please pick a category.</div>
+      </div>
+
+      ${isWriter || isBoth ? `
+      <div class="field">
+        <label>Your handle (YouTube, Instagram, or any link)</label>
+        <input id="f-handle" value="${escapeHtml(draftProfile.handle)}" placeholder="youtube.com/@yourname">
+      </div>` : `
+      <div class="field">
